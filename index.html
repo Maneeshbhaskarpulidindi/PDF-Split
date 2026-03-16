@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Slicer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- DROP SCREEN -->
+<div id="drop-screen" onclick="document.getElementById('fi').click()">
+  <input type="file" id="fi" accept=".pdf">
+  <div class="drop-ring">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#555568" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+  </div>
+  <h1>PDF Slicer</h1>
+  <p>Drop a PDF here, or click to browse</p>
+  <div class="local-pill">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"/></svg>
+    100% local — nothing ever uploaded
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="hdr">
+    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="9" y1="13" x2="15" y2="13"/></svg></div>
+    <span class="hdr-name">PDF Slicer</span>
+    <div class="file-chip"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg><span class="fn" id="hdr-fn"></span><span class="pg" id="hdr-pg"></span></div>
+    <div class="mode-seg">
+      <button class="msb active" id="mb-pick" onclick="setMode('pick')">Pick &amp; Act</button>
+      <button class="msb" id="mb-slice" onclick="setMode('slice')">Named Slices</button>
+    </div>
+    <div class="kbd-row">
+      <span><span class="kbd">Ctrl A</span> all</span>
+      <span><span class="kbd">Esc</span> clear</span>
+      <span><span class="kbd">Ctrl ↵</span> download</span>
+    </div>
+    <button class="hdr-btn" onclick="resetAll()">↩ New PDF</button>
+  </div>
+
+  <div class="workspace">
+    <!-- FILMSTRIP -->
+    <div class="filmstrip">
+      <div class="fs-top">
+        <input id="fs-in" type="text" placeholder="Range: 5-10, 15…" oninput="rangeHighlight(this.value)">
+      </div>
+      <div class="fs-scroll" id="fs-scroll"></div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div class="prev-pane" id="prev-pane">
+      <div class="prev-empty" id="prev-empty">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#555568" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+        <span>Click a page to preview it</span>
+      </div>
+      <canvas id="prev-cvs"></canvas>
+      <div class="prev-lbl" id="prev-lbl"></div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="act-pane">
+
+      <!-- PICK MODE -->
+      <div id="pick-pane">
+        <div class="pick-scroll">
+          <div class="pick-hdr">
+            <div class="pick-cnt"><em id="sel-n">0</em> pages selected</div>
+            <button class="sm-btn" onclick="selectAll()">All</button>
+            <button class="sm-btn" onclick="clearSel()">Clear</button>
+          </div>
+          <div class="pick-empty" id="pick-empty">
+            Click thumbnails to select pages,<br>
+            or type a range like <b>10-30</b> above the filmstrip.
+          </div>
+          <div class="reorder-list" id="ro-list" style="display:none"></div>
+          <div id="pick-actions" style="display:none">
+            <div class="summ-box" id="pick-summ"></div>
+            <div class="act-row">
+              <button class="act-btn pri" id="btn-combine" onclick="triggerCombine()" disabled>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><rect x="8" y="18" width="8" height="4" rx="1"/><path d="M4 6v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6"/><path d="M4 18v-2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><line x1="12" y1="10" x2="12" y2="14"/></svg>
+                Combine into one PDF
+                <span class="bdg" id="comb-bdg"></span>
+              </button>
+              <button class="act-btn sec" id="btn-split" onclick="triggerSplit()" disabled>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></svg>
+                Split into separate PDFs
+                <span class="bdg" id="split-bdg"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLICE MODE -->
+      <div id="slice-pane">
+        <div class="slice-scroll">
+          <div class="add-row" onclick="addSlice()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add a new slice
+          </div>
+          <div id="slice-list"></div>
+        </div>
+        <div class="slice-foot">
+          <div class="summ-box" id="slice-summ" style="display:none"></div>
+          <button class="dl-all" id="dl-all" onclick="downloadAllSlices()" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download all as ZIP
+          </button>
+          <div class="prog-wrap" id="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-ov" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-h">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+      <span id="modal-title">Download preview</span>
+    </div>
+    <div id="modal-rows"></div>
+    <div class="modal-pg-wrap" id="modal-pgs"></div>
+    <div class="modal-acts">
+      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-ok" onclick="confirmModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script defer src="script.js"></script>
+</body>
+</html>
